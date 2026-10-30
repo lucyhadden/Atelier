@@ -505,3 +505,49 @@ a.row:active { background: var(--color-paper-3); }
   /* Body-adjacent UI steps up on a phone. */
   .bar__link, .switch__option { font-size: var(--text-md); }
 }
+
+/* ---- where a seller ships from ---- */
+
+.ships {
+  display: inline-block;
+  margin-left: var(--space-2xs);
+  padding: 1px var(--space-2xs);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+.ships--unknown {
+  font-style: italic;
+}
+
+/* Overseas rows stay fully legible; they simply sit on a quieter ground. */
+.row--overseas > td {
+  background: var(--color-paper-2);
+}
+
+/* The sourcing table carries a shop, a product name and a price. Without
+   explicit widths the shop column steals room and long product names wrap to
+   one word per line. */
+.tier .ruled { table-layout: fixed; }
+.tier .ruled th:nth-child(1),
+.tier .ruled td:nth-child(1) { width: 34%; }
+.tier .ruled th:nth-child(3),
+.tier .ruled td:nth-child(3) { width: 7rem; }
+.tier .ruled td { overflow-wrap: break-word; }
+
+/* The tag sits under the shop name rather than widening the column. */
+.ships {
+  display: inline-block;
+  margin-left: 0;
+  margin-top: var(--space-3xs);
+}
+
+.seller { display: block; }
+.seller__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3xs);
+  margin-top: var(--space-3xs);
+}

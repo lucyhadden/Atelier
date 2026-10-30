@@ -49,12 +49,53 @@ def test_build_url_encodes_both_shapes():
     assert build_url("https://x.com/search/{q}", "wool coat") == "https://x.com/search/wool-coat"
 
 
-def test_every_tier_has_somewhere_to_look_in_both_domains():
+def test_every_tier_has_somewhere_to_look_in_every_region():
     for domain in ("interior", "wardrobe"):
-        for region in ("US", "UK"):
+        for region in retailers.REGIONS:
             grouped = retailers.by_tier(domain, region=region)
             for tier in retailers.TIERS:
                 assert grouped[tier], f"{domain}/{region} has no {tier} retailer"
+
+
+def test_region_is_a_preference_not_a_filter():
+    """An AU shopper still sees overseas sellers, but after the local ones."""
+    rows = retailers.by_tier("interior", region="AU")["splurge"]
+    assert rows, "AU has no splurge retailers"
+    locals_ = [r for r in rows if retailers.is_local(r, "AU")]
+    assert locals_, "AU splurge tier has no Australian option"
+    # Every local option precedes every overseas one.
+    flags = [retailers.is_local(r, "AU") for r in rows]
+    assert flags == sorted(flags, reverse=True), "overseas sellers jumped the queue"
+
+
+def test_international_can_be_turned_off():
+    with_intl = retailers.by_tier("wardrobe", region="AU", include_international=True)
+    without = retailers.by_tier("wardrobe", region="AU", include_international=False)
+    assert sum(len(v) for v in with_intl.values()) >= sum(len(v) for v in without.values())
+    for rows in without.values():
+        for r in rows:
+            assert retailers.is_local(r, "AU"), f"{r.name} is not an AU seller"
+
+
+def test_turning_international_on_never_displaces_a_local_seller():
+    off = retailers.by_tier("interior", region="AU", include_international=False)
+    on = retailers.by_tier("interior", region="AU", include_international=True)
+    for tier in retailers.TIERS:
+        local_off = {r.name for r in off[tier]}
+        local_on = {r.name for r in on[tier] if retailers.is_local(r, "AU")}
+        assert local_off <= local_on, f"{tier}: a local seller was pushed out"
+
+
+def test_the_retailers_lucy_asked_for_are_present():
+    """Freedom, Myer, David Jones and IKEA must be reachable for an AU shopper."""
+    names = {r.name for r in retailers.for_domain("interior", region="AU")}
+    for expected in ("Freedom", "Myer", "David Jones", "IKEA AU"):
+        assert expected in names, f"{expected} missing from the AU interior set"
+
+
+def test_every_search_template_has_a_query_placeholder():
+    for r in retailers.ALL:
+        assert "{q}" in r.search, f"{r.name} has no query placeholder"
 
 
 def test_narrow_category_still_fills_every_tier():
@@ -67,6 +108,16 @@ def test_narrow_category_still_fills_every_tier():
 def test_search_sources_cover_all_four_tiers(item):
     tiers = {s["tier"] for s in sourcing.search_sources(item)}
     assert tiers == set(retailers.TIERS)
+
+
+def test_search_sources_record_where_a_seller_ships_from(item):
+    rows = sourcing.search_sources(item, region="AU")
+    assert rows
+    assert all(r["ships"] in ("local", "overseas") for r in rows)
+    assert any(r["ships"] == "local" for r in rows), "no Australian seller offered"
+    for r in rows:
+        if r["ships"] == "local":
+            assert r["region"] == "AU"
 
 
 def test_source_item_drops_findings_without_a_real_url(db, item, monkeypatch):
@@ -126,6 +177,7 @@ def test_product_sources_rejects_relative_urls(item, monkeypatch):
                     price="$10",
                     tier="mid",
                     note="n",
+                    ships_to_region="yes",
                 ),
                 ProductFind(
                     retailer="Shop",
@@ -134,6 +186,7 @@ def test_product_sources_rejects_relative_urls(item, monkeypatch):
                     price="unknown",
                     tier="mid",
                     note="n",
+                    ships_to_region="unknown",
                 ),
             ],
             caveat="",
@@ -143,6 +196,34 @@ def test_product_sources_rejects_relative_urls(item, monkeypatch):
     assert len(rows) == 1
     assert rows[0]["url"] == "https://shop.com/lamp"
     assert rows[0]["price"] is None, "'unknown' must not be shown as a price"
+    assert rows[0]["ships"] == "unknown", "an unverified shop must not be called local"
+
+
+def test_unrecognised_shop_is_only_called_local_when_research_is_definite(item, monkeypatch):
+    from atelier.shopping import sourcing as mod
+
+    monkeypatch.setattr(mod, "research", lambda **_: "found")
+
+    def finding(answer):
+        return ProductFindings(
+            findings=[
+                ProductFind(
+                    retailer="Some Local Shop",
+                    product_name="Lamp",
+                    url="https://local.example/lamp",
+                    price="$99",
+                    tier="mid",
+                    note="n",
+                    ships_to_region=answer,
+                )
+            ],
+            caveat="",
+        )
+
+    for answer, expected in (("yes", "local"), ("no", "overseas"), ("maybe", "unknown")):
+        monkeypatch.setattr(mod, "structure", lambda answer=answer, **_: finding(answer))
+        rows, _ = mod.product_sources(item, region="AU")
+        assert rows[0]["ships"] == expected, f"{answer!r} -> {rows[0]['ships']!r}"
 
 
 def test_sourcing_is_idempotent(db, item, monkeypatch):

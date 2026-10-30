@@ -17,6 +17,8 @@ class SourceOut(ORMModel):
     retailer: str
     url: str
     kind: str
+    ships: str = "local"
+    region: str | None = None
     product_name: str | None = None
     price: str | None = None
     note: str | None = None
@@ -148,6 +150,7 @@ class StatusOut(BaseModel):
     model: str
     effort: str
     region: str
+    include_international: bool
     web_search_enabled: bool
     pinterest_configured: bool
     pinterest_connected: bool

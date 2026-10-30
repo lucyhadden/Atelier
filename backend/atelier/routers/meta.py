@@ -22,6 +22,7 @@ def status(db: Session = Depends(get_db)) -> StatusOut:
         model=s.atelier_model,
         effort=s.atelier_effort,
         region=s.atelier_region,
+        include_international=s.atelier_include_international,
         web_search_enabled=s.atelier_web_search,
         pinterest_configured=s.pinterest_configured,
         pinterest_connected=pinterest.is_connected(),
@@ -47,16 +48,29 @@ def list_domains() -> list[dict]:
 
 @router.get("/retailers")
 def list_retailers(domain: str = "interior", region: str | None = None) -> dict:
-    region = region or get_settings().atelier_region
-    grouped = retailers.by_tier(domain, region=region, per_tier=99)
+    settings = get_settings()
+    region = region or settings.atelier_region
+    grouped = retailers.by_tier(
+        domain,
+        region=region,
+        per_tier=99,
+        include_international=settings.atelier_include_international,
+    )
     return {
         "region": region,
+        "regions": list(retailers.REGIONS),
         "tiers": [
             {
                 "tier": tier,
                 "label": retailers.TIER_LABELS[tier],
                 "retailers": [
-                    {"name": r.name, "note": r.note, "categories": list(r.category_hints)}
+                    {
+                        "name": r.name,
+                        "note": r.note,
+                        "categories": list(r.category_hints),
+                        "ships": "local" if retailers.is_local(r, region) else "overseas",
+                        "region": r.regions[0] if r.regions else None,
+                    }
                     for r in grouped.get(tier, [])
                 ],
             }

@@ -33,16 +33,23 @@ HEADERS = {
 
 
 # Status codes that mean "a bot asked, so we said no" rather than "bad URL".
-BOT_WALL = {401, 403, 418, 429, 503}
+BOT_WALL = {401, 403, 406, 418, 429, 503}
 
 
 def main() -> int:
+    only = {a.upper() for a in sys.argv[1:] if a.upper() in {"AU", "NZ", "UK", "US"}}
     ok, blocked, broken = [], [], []
 
     with httpx.Client(timeout=20.0, follow_redirects=True, headers=HEADERS) as client:
         for r in ALL:
+            if only and not (set(r.regions) & only):
+                continue
             url = build_url(r.search, SAMPLE[r.domain])
-            label = f"{r.domain:9s} {r.tier:11s} {r.name}"
+            label = f"{'/'.join(r.regions):8s} {r.domain:9s} {r.tier:11s} {r.name}"
+            if r.login_required:
+                # Sits behind a sign-in; a script can never confirm it.
+                blocked.append((label, url, "sign-in"))
+                continue
             try:
                 resp = client.get(url)
             except httpx.TimeoutException:

@@ -121,6 +121,10 @@ class Source(Base):
     # kind="search" is a deep link into a shop's search results (always valid).
     # kind="product" is a specific product found via live web search.
     kind: Mapped[str] = mapped_column(String(16), default="search")
+    # "local" = ships within your region; "overseas" = ships to you from abroad.
+    ships: Mapped[str] = mapped_column(String(16), default="local")
+    # The retailer's home region, for display ("AU", "US", ...).
+    region: Mapped[str | None] = mapped_column(String(8), nullable=True)
     product_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
     price: Mapped[str | None] = mapped_column(String(64), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)

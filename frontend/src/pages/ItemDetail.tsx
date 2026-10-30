@@ -13,20 +13,49 @@ import {
   type Source,
   type Tier,
 } from "../lib/api";
+import { REGION_NAMES, useStatus } from "../lib/useStatus";
 import { useAsync } from "../lib/useAsync";
+
+/** Local options first, then overseas ones. Within each, found products before
+ *  bare search links. Nothing is hidden - the order carries the preference. */
+function orderSources(sources: Source[]): Source[] {
+  const rank = (s: Source) =>
+    (s.ships === "overseas" ? 2 : 0) + (s.kind === "product" ? 0 : 1);
+  return [...sources].sort((a, b) => rank(a) - rank(b));
+}
+
+function ShipsTag({ source }: { source: Source }) {
+  if (source.ships === "overseas") {
+    return (
+      <span className="ships ships--overseas">
+        ships from {source.region ?? "overseas"}
+      </span>
+    );
+  }
+  if (source.ships === "unknown") {
+    return <span className="ships ships--unknown">shipping unchecked</span>;
+  }
+  return null;
+}
 
 function TierBlock({ tier, sources }: { tier: Tier; sources: Source[] }) {
   if (sources.length === 0) return null;
 
-  const found = sources.filter((s) => s.kind === "product");
-  const searches = sources.filter((s) => s.kind === "search");
+  const rows = orderSources(sources);
+  const found = rows.filter((s) => s.kind === "product");
+  const local = rows.filter((s) => s.ships === "local");
 
   return (
     <section className="tier">
       <div className="tier__head">
         <h3 className="tier__name">{TIER_LABEL[tier]}</h3>
         <span className="tier__count num">
-          {found.length > 0 ? `${found.length} found` : `${searches.length} places to look`}
+          {found.length > 0
+            ? `${found.length} found`
+            : `${rows.length} places to look`}
+          {local.length > 0 && local.length < rows.length
+            ? `, ${local.length} local`
+            : ""}
         </span>
       </div>
 
@@ -39,30 +68,24 @@ function TierBlock({ tier, sources }: { tier: Tier; sources: Source[] }) {
           </tr>
         </thead>
         <tbody>
-          {found.map((s) => (
-            <tr key={s.id}>
+          {rows.map((s) => (
+            <tr key={s.id} className={s.ships === "overseas" ? "row--overseas" : undefined}>
               <td>
-                {s.retailer} <span className="found">found</span>
+                <span className="seller">{s.retailer}</span>
+                <span className="seller__tags">
+                  {s.kind === "product" && <span className="found">found</span>}
+                  <ShipsTag source={s} />
+                </span>
               </td>
               <td>
                 <a href={s.url} target="_blank" rel="noreferrer noopener">
-                  {s.product_name ?? "View"}
+                  {s.kind === "product" ? (s.product_name ?? "View") : "Search their site"}
                 </a>
                 {s.note && <div className="small muted">{s.note}</div>}
               </td>
-              <td className="num">{s.price ?? "not listed"}</td>
-            </tr>
-          ))}
-          {searches.map((s) => (
-            <tr key={s.id}>
-              <td>{s.retailer}</td>
-              <td>
-                <a href={s.url} target="_blank" rel="noreferrer noopener">
-                  Search their site
-                </a>
-                {s.note && <div className="small muted">{s.note}</div>}
+              <td className={s.kind === "product" ? "num" : "num muted"}>
+                {s.price ?? "not listed"}
               </td>
-              <td className="num muted">not listed</td>
             </tr>
           ))}
         </tbody>
@@ -77,6 +100,7 @@ export function ItemDetail() {
   const { search } = useLocation();
 
   const item = useAsync<Item>(() => api.item(id), [id]);
+  const status = useStatus();
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,6 +189,16 @@ export function ItemDetail() {
                 actually located, with the price as listed at the time of the search.
                 Check it on the page before buying. Unmarked rows are searches of that
                 shop, not a promise they stock it.
+                {status && (
+                  <>
+                    {" "}
+                    Shopping for{" "}
+                    <strong>{REGION_NAMES[status.region] ?? status.region}</strong>
+                    {status.include_international
+                      ? ", with overseas sellers listed after the local ones."
+                      : ", local sellers only."}
+                  </>
+                )}
               </p>
 
               <div className="btn-row">

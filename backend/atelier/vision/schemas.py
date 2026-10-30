@@ -105,6 +105,11 @@ class ProductFind(BaseModel):
     price: str = Field(description="As shown, with currency. 'unknown' if not visible.")
     tier: str = Field(description="splurge, mid, budget or secondhand")
     note: str = Field(description="How close this is to the original, and where it differs")
+    ships_to_region: str = Field(
+        description="Does this seller ship to the shopper's region? 'yes' if the site "
+        "says so or it is a local seller, 'no' if it says it does not, 'unknown' if you "
+        "could not tell. Never guess 'yes'."
+    )
 
 
 class ProductFindings(BaseModel):

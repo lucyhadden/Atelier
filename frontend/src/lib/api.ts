@@ -11,6 +11,8 @@ export const TIER_LABEL: Record<Tier, string> = {
   secondhand: "Secondhand",
 };
 
+export type Ships = "local" | "overseas" | "unknown";
+
 export interface Source {
   id: number;
   tier: Tier;
@@ -20,6 +22,8 @@ export interface Source {
   product_name: string | null;
   price: string | null;
   note: string | null;
+  ships: Ships;
+  region: string | null;
 }
 
 export interface Item {
@@ -129,6 +133,7 @@ export interface Status {
   model: string;
   effort: string;
   region: string;
+  include_international: boolean;
   web_search_enabled: boolean;
   pinterest_configured: boolean;
   pinterest_connected: boolean;

@@ -99,9 +99,17 @@ Shops change their URL schemes, which silently turns search links into 404s:
 make check-retailers
 ```
 
-That fires one request per template and tells you which are fine, which are
-bot-blocked (almost always still correct), and which are genuinely broken. Fixing
-one is a one-line edit in `backend/atelier/shopping/retailers.py`.
+That fires one request per template and sorts the results into three buckets:
+fine, bot-blocked (almost always still correct — the shop refused a script, not a
+bad URL), and genuinely broken. Fixing one is a one-line edit in
+`backend/atelier/shopping/retailers.py`. Pass a region to narrow it:
+
+```bash
+.venv/bin/python scripts/check_retailers.py AU
+```
+
+Every template in the registry was verified this way when added; it is how the
+Heal'''s, Myer, Coco Republic, Adairs and Zimmermann URLs got corrected.
 
 **On floor plans.** Atelier only reports a dimension if it is actually written on
 the plan or readable from a scale bar. Otherwise it says "unclear" and tells you
@@ -132,7 +140,26 @@ ATELIER_WEB_SEARCH=false
 `ATELIER_WEB_SEARCH=false` makes sourcing instant and free — you still get all four
 tiers, just as search links rather than named products.
 
-Set `ATELIER_REGION=UK` to switch to the UK retailer set.
+## Where you shop
+
+```
+ATELIER_REGION=AU                  # AU, NZ, UK or US
+ATELIER_INCLUDE_INTERNATIONAL=true
+```
+
+Region is a **preference, not a filter**. Set it to `AU` and every tier leads with
+Australian sellers — Coco Republic and Jardan at the top, Freedom and Myer and
+David Jones in the middle, IKEA AU and Kmart at the bottom, Gumtree and eBay AU
+for secondhand — and then lists overseas sellers that ship to you underneath,
+labelled `ships from US`. Nothing good is hidden because of where you live.
+
+Set `ATELIER_INCLUDE_INTERNATIONAL=false` if you only want things that ship
+domestically.
+
+When live web search finds a shop that isn't in the registry, Atelier asks whether
+it ships to your region and reports the answer. If that can't be established it
+says **shipping unchecked** rather than guessing — an unverified shop is never
+presented as local.
 
 ---
 

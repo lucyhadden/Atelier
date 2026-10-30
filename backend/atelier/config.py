@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     atelier_model: str = "claude-opus-5"
     atelier_effort: str = "high"
     atelier_region: str = "US"
+    # Region is a preference, not a filter: with this on, retailers that ship
+    # worldwide are offered alongside local ones, labelled as overseas.
+    atelier_include_international: bool = True
     atelier_web_search: bool = True
     atelier_data_dir: Path = REPO_ROOT / "data"
 

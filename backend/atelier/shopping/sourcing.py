@@ -30,16 +30,22 @@ log = logging.getLogger(__name__)
 
 def search_sources(item: Item, *, region: str | None = None, per_tier: int = 3) -> list[dict]:
     """Deep search links, grouped by tier. Pure local computation."""
-    region = region or get_settings().atelier_region
+    settings = get_settings()
+    region = region or settings.atelier_region
     queries = search_queries(item)
     primary = queries[0] if queries else item.name
     grouped = retailers.by_tier(
-        item.domain, region=region, category=item.category, per_tier=per_tier
+        item.domain,
+        region=region,
+        category=item.category,
+        per_tier=per_tier,
+        include_international=settings.atelier_include_international,
     )
 
     out: list[dict] = []
     for tier in retailers.TIERS:
         for r in grouped.get(tier, []):
+            local = retailers.is_local(r, region)
             out.append(
                 {
                     "tier": tier,
@@ -49,16 +55,31 @@ def search_sources(item: Item, *, region: str | None = None, per_tier: int = 3) 
                     "product_name": None,
                     "price": None,
                     "note": r.note or None,
+                    "ships": "local" if local else "overseas",
+                    "region": r.regions[0] if r.regions else None,
                 }
             )
     return out
 
 
+REGION_NAMES = {"AU": "Australia", "NZ": "New Zealand", "UK": "the UK", "US": "the US"}
+
+
 def _research_prompt(item: Item, region: str) -> str:
+    settings = get_settings()
     attrs = ", ".join(f"{k}: {v}" for k, v in (item.attributes or {}).items())
-    shops = retailers.by_tier(item.domain, region=region, category=item.category, per_tier=4)
+    shops = retailers.by_tier(
+        item.domain,
+        region=region,
+        category=item.category,
+        per_tier=4,
+        include_international=settings.atelier_include_international,
+    )
     shop_lines = "\n".join(
-        f"  {retailers.TIER_LABELS[t]}: {', '.join(r.name for r in rs)}"
+        f"  {retailers.TIER_LABELS[t]}: "
+        + ", ".join(
+            r.name if retailers.is_local(r, region) else f"{r.name} (overseas)" for r in rs
+        )
         for t, rs in shops.items()
         if rs
     )
@@ -69,7 +90,7 @@ def _research_prompt(item: Item, region: str) -> str:
   Details: {attrs or "none recorded"}
   Described as: {item.description}
   Search terms to try: {", ".join(item.search_terms or [item.name])}
-  Shopping region: {region}
+  Shopping region: {REGION_NAMES.get(region, region)}
 
 Find up to two products in each of these price tiers:
 
@@ -78,12 +99,20 @@ Find up to two products in each of these price tiers:
   Budget - the cheapest thing that still gets the look
   Secondhand - vintage, resale or marketplace
 
-Retailers worth trying in this region (you are not limited to these):
+Retailers worth trying (you are not limited to these):
 {shop_lines}
 
+Prefer retailers that ship within {REGION_NAMES.get(region, region)}, and quote
+prices in the local currency where you can. Overseas options are welcome too -
+this shopper is happy to order from abroad - but say so and flag the shipping
+cost or import duty if the page shows it. Do not silently present an overseas
+listing as if it were a local one.
+
 For each product give the retailer, the exact product name, the full URL of its
-product page, and the price as listed. Then say in one clause how it differs
-from the original. Skip any tier where you cannot find something credible."""
+product page, and the price as listed. Say whether it ships to
+{REGION_NAMES.get(region, region)} - answer "unknown" rather than assuming.
+Then say in one clause how it differs from the original. Skip any tier where you
+cannot find something credible."""
 
 
 def product_sources(item: Item, *, region: str | None = None) -> tuple[list[dict], str]:
@@ -112,6 +141,22 @@ def product_sources(item: Item, *, region: str | None = None) -> tuple[list[dict
         if not f.url.startswith(("http://", "https://")):
             log.warning("dropping finding with unusable url: %r", f.url)
             continue
+        # Match the finding back to a known retailer so we can say whether it
+        # ships locally; an unrecognised shop is reported as unknown, not local.
+        known = next(
+            (
+                r
+                for r in retailers.ALL
+                if r.domain == item.domain and r.name.lower() == f.retailer.lower().strip()
+            ),
+            None,
+        )
+        if known:
+            ships = "local" if retailers.is_local(known, region) else "overseas"
+        else:
+            # An unrecognised shop: trust the research only when it is definite.
+            answer = (f.ships_to_region or "unknown").strip().lower()
+            ships = {"yes": "local", "no": "overseas"}.get(answer, "unknown")
         out.append(
             {
                 "tier": f.tier if f.tier in valid_tiers else "mid",
@@ -121,6 +166,8 @@ def product_sources(item: Item, *, region: str | None = None) -> tuple[list[dict
                 "product_name": f.product_name,
                 "price": None if f.price.lower() == "unknown" else f.price,
                 "note": f.note,
+                "ships": ships,
+                "region": known.regions[0] if known and known.regions else None,
             }
         )
     return out, findings.caveat
