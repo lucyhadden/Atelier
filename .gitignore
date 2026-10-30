@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Secrets & local state
+.env
+.env.local
+
+# Local data: downloaded pin images, SQLite db, floor plans
+data/
+!data/.gitkeep
+
+.DS_Store
+
+# Hallmark build log
+.hallmark/
