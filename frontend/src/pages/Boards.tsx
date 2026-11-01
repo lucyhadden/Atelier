@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { Banner, Empty, ErrorState, LoadingLines } from "../components/States";
-import { api, type Board } from "../lib/api";
+import { api, type Board, type SyncReport } from "../lib/api";
 import { useDomain } from "../lib/domain";
 import { useAsync } from "../lib/useAsync";
 
@@ -104,11 +104,12 @@ function ImportForm({ domain, onDone }: { domain: "interior" | "wardrobe"; onDon
 
 function PinterestPanel({ domain, onSynced }: { domain: "interior" | "wardrobe"; onSynced: () => void }) {
   const status = useAsync(() => api.pinterestStatus(), []);
-  const [boards, setBoards] = useState<{ external_id: string; name: string; pin_count: number }[] | null>(
-    null,
-  );
+  const [boards, setBoards] = useState<
+    { external_id: string; name: string; pin_count: number; privacy: string | null }[] | null
+  >(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [report, setReport] = useState<SyncReport | null>(null);
 
   if (status.loading) return <div className="panel"><LoadingLines label="Checking Pinterest" /></div>;
   if (status.error) return <div className="panel"><ErrorState error={status.error} onRetry={status.reload} /></div>;
@@ -157,8 +158,9 @@ function PinterestPanel({ domain, onSynced }: { domain: "interior" | "wardrobe";
   async function sync(externalId: string, name: string) {
     setBusy(externalId);
     setError(null);
+    setReport(null);
     try {
-      await api.pinterestSync({ external_id: externalId, domain, name });
+      setReport(await api.pinterestSync({ external_id: externalId, domain, name }));
       onSynced();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -170,7 +172,51 @@ function PinterestPanel({ domain, onSynced }: { domain: "interior" | "wardrobe";
   return (
     <div className="panel">
       <h2>Pinterest</h2>
-      <p className="small muted">Connected.</p>
+
+      {s.account ? (
+        <ul className="meta num">
+          <li>@{s.account.username}</li>
+          {s.account.board_count !== null && <li>{s.account.board_count} boards</li>}
+          {s.account.pin_count !== null && <li>{s.account.pin_count} pins</li>}
+        </ul>
+      ) : (
+        <p className="small muted">
+          Connected{s.account_error ? ", but the account could not be read." : "."}
+        </p>
+      )}
+
+      {report && (
+        <div className="notice">
+          <strong>{report.board_name}</strong>: added {report.added} of{" "}
+          {report.remote_pins}
+          {report.already_had > 0 ? `, ${report.already_had} already here` : ""}.
+          {report.sections.length > 0 && (
+            <>
+              {" "}
+              Walked {report.sections.length}{" "}
+              {report.sections.length === 1 ? "section" : "sections"} (
+              {report.sections.join(", ")}).
+            </>
+          )}
+          {report.skipped_no_image > 0 && (
+            <> {report.skipped_no_image} pin(s) had no usable image.</>
+          )}
+          {report.failed.length > 0 && (
+            <> {report.failed.length} image(s) failed to download.</>
+          )}
+          {report.gone_from_pinterest > 0 && (
+            <>
+              {" "}
+              {report.gone_from_pinterest} pin(s) here are no longer on the board. They
+              are kept, not deleted.
+            </>
+          )}
+          {report.truncated && (
+            <> This board is larger than one sync can fetch. Run it again to continue.</>
+          )}
+        </div>
+      )}
+
       <div className="btn-row">
         <button type="button" className="btn" onClick={loadBoards}>
           {boards ? "Refresh boards" : "Show my boards"}
@@ -194,7 +240,12 @@ function PinterestPanel({ domain, onSynced }: { domain: "interior" | "wardrobe";
             <div className="row" key={b.external_id}>
               <div className="row__main">
                 <div>{b.name}</div>
-                <div className="small muted num">{b.pin_count} pins</div>
+                <ul className="meta num">
+                  <li>{b.pin_count} pins</li>
+                  {b.privacy && b.privacy.toLowerCase() !== "public" && (
+                    <li>{b.privacy.toLowerCase()}</li>
+                  )}
+                </ul>
               </div>
               <div className="row__aside">
                 <button

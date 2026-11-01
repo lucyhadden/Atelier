@@ -141,6 +141,35 @@ export interface Status {
   item_count: number;
 }
 
+export interface PinterestAccount {
+  username: string | null;
+  account_type: string | null;
+  pin_count: number | null;
+  board_count: number | null;
+}
+
+export interface PinterestStatus {
+  configured: boolean;
+  connected: boolean;
+  redirect_uri: string;
+  scopes: string[];
+  account: PinterestAccount | null;
+  account_error?: string;
+}
+
+export interface SyncReport {
+  board_id: number;
+  board_name: string;
+  remote_pins: number;
+  added: number;
+  already_had: number;
+  failed: { pin: string; error: string }[];
+  sections: string[];
+  skipped_no_image: number;
+  truncated: boolean;
+  gone_from_pinterest: number;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -236,15 +265,18 @@ export const api = {
   designs: (spaceId: number) => request<DesignPlan[]>(`/spaces/${spaceId}/designs`),
 
   pinterestStatus: () =>
-    request<{ configured: boolean; connected: boolean; redirect_uri: string }>(
-      "/pinterest/status",
-    ),
+    request<PinterestStatus>("/pinterest/status"),
   pinterestBoards: () =>
-    request<{ boards: { external_id: string; name: string; pin_count: number }[] }>(
-      "/pinterest/boards",
-    ),
+    request<{
+      boards: {
+        external_id: string;
+        name: string;
+        pin_count: number;
+        privacy: string | null;
+      }[];
+    }>("/pinterest/boards"),
   pinterestSync: (payload: { external_id: string; domain: Domain; name?: string }) =>
-    post<{ board_id: number; added: number }>("/pinterest/sync", payload),
+    post<SyncReport>("/pinterest/sync", payload),
   pinterestDisconnect: () => post<unknown>("/pinterest/disconnect"),
 };
 

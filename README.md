@@ -70,13 +70,40 @@ name becomes the board name. Nothing is uploaded anywhere: files are copied into
 Atelier uses the **official Pinterest API v5**. It does not automate a login or
 scrape the site — that breaks Pinterest's terms and stops working without warning.
 
-1. Create an app at [developers.pinterest.com/apps](https://developers.pinterest.com/apps/)
+1. Create an app at [developers.pinterest.com/apps](https://developers.pinterest.com/apps/).
+   Answer **"Yes, mine"** to *Reads Pins and/or Boards Data* — "Yes, for general
+   users" triggers a separate approval you do not need.
 2. Add `http://localhost:8787/api/pinterest/callback` as a redirect URI
 3. Put the client id and secret in `.env`, restart the backend
 4. Click **Connect Pinterest** on the Boards page
 
 New Pinterest apps start in trial mode, which can only read *your own* account.
 That is exactly what this needs, so you do not have to apply for anything.
+
+**What the sync actually handles**
+
+- **Secret boards.** Atelier asks for `boards:read_secret` and `pins:read_secret`.
+  Without those a board you have marked secret — which a half-finished house plan
+  very often is — simply does not appear. Scopes are fixed when you authorise, so
+  this has to be right up front.
+- **Board sections.** The board-pins endpoint does not reliably return pins filed
+  inside a section, so sections are walked separately and merged, deduplicated by
+  pin id. The section name is carried onto the pin, so the grouping you made on
+  Pinterest survives the import.
+- **Idea and video pins.** These carry their cover image under `media.items`
+  rather than `media.images`. Without handling that, every idea pin on a board is
+  silently skipped.
+- **Rate limits.** Trial access allows roughly 1,000 calls a day. A 429 is waited
+  out using Pinterest's own `Retry-After` and retried; if it persists the sync
+  stops with a message saying so, and already-downloaded pins are kept, so running
+  it again continues rather than restarting.
+- **Long boards.** Paging stops at 5,000 pins per board and *tells you* it
+  stopped, rather than returning a partial board that looks complete.
+- **Pins deleted on Pinterest.** Reported, never deleted locally. Losing a
+  catalogued piece because a pin was tidied away would be worse than keeping a
+  stale one.
+- **Token expiry.** The access token is refreshed just before it expires, so a
+  long sync does not die halfway through.
 
 ### A Pinterest data export (no app needed)
 

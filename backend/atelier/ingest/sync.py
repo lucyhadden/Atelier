@@ -44,7 +44,8 @@ def sync_board(
         board.name = name
 
     known = {p.external_id for p in board.pins if p.external_id}
-    remote_pins = pinterest.list_pins(board_external_id)
+    result = pinterest.list_pins(board_external_id)
+    remote_pins = result["pins"]
 
     added, failed = 0, []
     for rp in remote_pins:
@@ -55,18 +56,29 @@ def sync_board(
         except ImageError as exc:
             failed.append({"pin": rp["external_id"], "error": str(exc)})
             continue
+        # A pin filed in a board section keeps that section name as its note,
+        # so the grouping you made on Pinterest is not lost on import.
+        note = rp["note"]
+        if rp.get("section"):
+            note = f"[{rp['section']}] {note}" if note else f"[{rp['section']}]"
         db.add(
             Pin(
                 board_id=board.id,
                 external_id=rp["external_id"],
                 title=rp["title"],
-                note=rp["note"],
+                note=note,
                 link=rp["link"],
                 image_file=filename,
                 source_url=rp["image_url"],
             )
         )
         added += 1
+
+    # Pins removed on Pinterest since the last sync. Reported, never deleted -
+    # losing a catalogued piece because a pin was tidied away would be worse
+    # than carrying a stale one.
+    remote_ids = {rp["external_id"] for rp in remote_pins}
+    removed = sorted(known - remote_ids) if remote_ids else []
 
     board.synced_at = datetime.now(UTC)
     db.commit()
@@ -78,4 +90,8 @@ def sync_board(
         "added": added,
         "already_had": len(known),
         "failed": failed,
+        "sections": result["sections"],
+        "skipped_no_image": result["skipped_no_image"],
+        "truncated": result["truncated"],
+        "gone_from_pinterest": len(removed),
     }

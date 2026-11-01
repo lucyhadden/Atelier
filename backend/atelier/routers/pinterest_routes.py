@@ -37,11 +37,22 @@ def status():
     from ..config import get_settings
 
     s = get_settings()
-    return {
+    payload = {
         "configured": s.pinterest_configured,
         "connected": pinterest.is_connected(),
         "redirect_uri": s.pinterest_redirect_uri,
+        "scopes": list(pinterest.SCOPES),
+        "account": None,
     }
+    if payload["connected"]:
+        # Show whose account this is, so a wrong-account connection is obvious
+        # before you sync a board. A failure here must not break the page.
+        try:
+            payload["account"] = pinterest.user_account()
+        except pinterest.PinterestError as exc:
+            log.warning("could not read the connected account: %s", exc)
+            payload["account_error"] = str(exc)
+    return payload
 
 
 @router.get("/login")
@@ -121,5 +132,9 @@ def sync_board(payload: SyncBoardIn, db: Session = Depends(get_db)):
         )
     except pinterest.PinterestNotConnected as exc:
         raise HTTPException(401, str(exc)) from exc
+    except pinterest.PinterestRateLimited as exc:
+        # 429 upstream is a 429 here, so the UI can say "wait and retry"
+        # rather than presenting it as a broken sync.
+        raise HTTPException(429, str(exc)) from exc
     except pinterest.PinterestError as exc:
         raise HTTPException(502, str(exc)) from exc
